@@ -2,6 +2,7 @@ from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, Date
 from sqlalchemy.orm import relationship
 from ..database import Base
 from datetime import datetime
+from sqlalchemy.sql import func
 
 class Student(Base):
     __tablename__ = "students"
@@ -11,6 +12,8 @@ class Student(Base):
     name = Column(String(50))
     class_name = Column(String(50))
     enrollments = relationship("Enrollment", back_populates="student")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Course(Base):
     __tablename__ = "courses"
@@ -25,6 +28,8 @@ class Course(Base):
     teacher_info = relationship("Teacher", back_populates="courses")
     enrollments = relationship("Enrollment", back_populates="course")
     schedules = relationship("CourseSchedule", back_populates="course")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Enrollment(Base):
     __tablename__ = "enrollments"
@@ -37,6 +42,8 @@ class Enrollment(Base):
 
     student = relationship("Student", back_populates="enrollments")
     course = relationship("Course", back_populates="enrollments")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class User(Base):
     __tablename__ = "users"
@@ -49,6 +56,8 @@ class User(Base):
     role = Column(String(20))
     student_id = Column(Integer, ForeignKey("students.id"), nullable=True)
     notifications = relationship("Notification", back_populates="user")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Teacher(Base):
     __tablename__ = "teachers"
@@ -59,6 +68,8 @@ class Teacher(Base):
     department = Column(String(100))
     title = Column(String(50))
     courses = relationship("Course", back_populates="teacher_info")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class Classroom(Base):
     __tablename__ = "classrooms"
@@ -70,6 +81,8 @@ class Classroom(Base):
     has_projector = Column(Boolean, default=False)
     has_computer = Column(Boolean, default=False)
     course_schedules = relationship("CourseSchedule", back_populates="classroom")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class CourseSchedule(Base):
     __tablename__ = "course_schedules"
@@ -83,6 +96,8 @@ class CourseSchedule(Base):
     week_type = Column(String(4))
     course = relationship("Course", back_populates="schedules")
     classroom = relationship("Classroom", back_populates="course_schedules")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
 class CourseReview(Base):
     __tablename__ = "course_reviews"
@@ -91,7 +106,8 @@ class CourseReview(Base):
     enrollment_id = Column(Integer, ForeignKey("enrollments.id"), unique=True)
     content = Column(String(1000))
     rating = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     is_anonymous = Column(Boolean, default=False)
     enrollment = relationship("Enrollment", back_populates="review")
 
@@ -104,5 +120,6 @@ class Notification(Base):
     content = Column(String(1000))
     type = Column(String(20))
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     user = relationship("User", back_populates="notifications")

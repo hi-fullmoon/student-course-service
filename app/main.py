@@ -16,7 +16,7 @@ init_database()
 # 创建表
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="学生选课系统")
+app = FastAPI(title="选修课管理系统")
 
 # CORS 配置
 app.add_middleware(
@@ -52,7 +52,7 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 @app.get("/")
 async def root():
     return {
-        "message": "欢迎使用学生选课系统",
+        "message": "欢迎使用选修课管理系统",
         "version": "1.0.0",
         "docs_url": "/docs",
         "redoc_url": "/redoc"
