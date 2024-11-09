@@ -38,8 +38,7 @@
 
 4. 配置环境变量
    cp .env.example .env
-
-   # 编辑 .env 文件，设置必要的环境变量
+   编辑 .env 文件，设置必要的环境变量
 
 5. 初始化数据库
    alembic upgrade head
@@ -89,4 +88,8 @@ GRADE_INPUT_ENABLED=true
 
 ## 开发团队
 
+// TODO:
+
 ## 许可证
+
+// TODO:
