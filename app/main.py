@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from .database import engine
 from .models import models
 from .routers import (
@@ -11,15 +10,11 @@ from .utils.init_db import init_database
 from .utils.logger import system_logger
 from .utils.response import response
 
-# 初始化数据库
 init_database()
-
-# 创建表
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="选修课管理系统")
 
-# CORS 配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,16 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 全局错误处理
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     system_logger.error(f"Global error: {str(exc)}", exc_info=True)
-    return response(
-        code=500,
-        message="服务器内部错误"
-    )
+    return response(code=500, message="服务器内部错误")
 
-# 路由注册
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(students.router, prefix="/api/students", tags=["students"])
 app.include_router(teachers.router, prefix="/api/teachers", tags=["teachers"])
@@ -63,7 +53,6 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-# 添加以下代码来配置服务器运行端口
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3000)
