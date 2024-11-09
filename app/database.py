@@ -35,3 +35,6 @@ def check_database_connection():
     except Exception as e:
         system_logger.error(f"Database connection error: {str(e)}")
         return False
+
+# 添加这行来打印连接字符串（临时调试用）
+# print(settings.DATABASE_URL)
