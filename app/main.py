@@ -9,6 +9,7 @@ from .routers import (
 )
 from .utils.init_db import init_database
 from .utils.logger import system_logger
+from .utils.response import response
 
 # 初始化数据库
 init_database()
@@ -31,9 +32,9 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     system_logger.error(f"Global error: {str(exc)}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error"}
+    return response(
+        code=500,
+        message="服务器内部错误"
     )
 
 # 路由注册
@@ -61,3 +62,8 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# 添加以下代码来配置服务器运行端口
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=3000)

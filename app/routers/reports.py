@@ -1,108 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from typing import List
 from ..database import get_db
 from ..models import models
-from ..utils.auth import get_current_active_user
-from ..utils.reports import create_excel_report, create_word_report
+from ..utils.auth import get_current_user
+from ..utils.response import response
+from datetime import datetime
 
 router = APIRouter()
 
-@router.get("/course/{course_id}/excel")
-def export_course_report(
-    course_id: int,
+@router.get("/course-statistics")
+def get_course_statistics(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_user)
+    current_user: models.User = Depends(get_current_user)
 ):
     if current_user.role not in ["admin", "teacher"]:
-        raise HTTPException(status_code=403, detail="没有权限导出报表")
+        return response(code=403, message="没有权限查看课程统计")
 
-    course = db.query(models.Course).filter(models.Course.id == course_id).first()
-    if not course:
-        raise HTTPException(status_code=404, detail="课程不存在")
-
-    # 准备数据
-    data = []
-    for enrollment in course.enrollments:
-        data.append({
-            "学生ID": enrollment.student.student_id,
-            "学生姓名": enrollment.student.name,
-            "班级": enrollment.student.class_name,
-            "成绩": enrollment.grade if enrollment.grade else "未评分"
-        })
-
-    return create_excel_report(data, f"{course.name}_成绩表.xlsx")
-
-@router.get("/student/{student_id}/transcript")
-def export_student_transcript(
-    student_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_user)
-):
-    if current_user.role == "student" and current_user.student_id != student_id:
-        raise HTTPException(status_code=403, detail="只能导出自己的成绩单")
-
-    student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    if not student:
-        raise HTTPException(status_code=404, detail="学生不存在")
-
-    # 准备数据
-    content = [{
-        "学生信息": "",
-        "学号": student.student_id,
-        "姓名": student.name,
-        "班级": student.class_name
-    }]
-
-    course_data = []
-    total_credits = 0
-    total_grade_points = 0
-    graded_courses = 0
-
-    for enrollment in student.enrollments:
-        if enrollment.grade is not None:
-            grade_point = (enrollment.grade / 20) - 1  # 简单的绩点计算方式
-            total_grade_points += grade_point * enrollment.course.credit
-            total_credits += enrollment.course.credit
-            graded_courses += 1
-
-        course_data.append({
-            "课程编号": enrollment.course.course_code,
-            "课程名称": enrollment.course.name,
-            "学分": enrollment.course.credit,
-            "成绩": enrollment.grade if enrollment.grade else "未评分",
-            "任课教师": enrollment.course.teacher
-        })
-
-    content.extend(course_data)
-
-    if graded_courses > 0:
-        gpa = total_grade_points / total_credits
-        content.append({
-            "总结": "",
-            "总学分": total_credits,
-            "平均绩点": round(gpa, 2)
-        })
-
-    return create_word_report(
-        f"{student.name}的成绩单",
-        content,
-        f"{student.name}_成绩单.docx"
-    )
-
-@router.get("/statistics/department")
-def export_department_statistics(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_user)
-):
-    if current_user.role not in ["admin", "teacher"]:
-        raise HTTPException(status_code=403, detail="没有权限导出系统统计报表")
-
-    # 准备课程统计数据
     courses = db.query(models.Course).all()
-    course_stats = []
+    stats = []
 
     for course in courses:
+        # 如果是教师，只能查看自己的课程
+        if current_user.role == "teacher" and course.teacher_id != current_user.id:
+            continue
+
         enrollments = course.enrollments
         total_students = len(enrollments)
         graded_students = len([e for e in enrollments if e.grade is not None])
@@ -112,14 +33,145 @@ def export_department_statistics(
         else:
             avg_grade = 0
 
-        course_stats.append({
-            "课程编号": course.course_code,
-            "课程名称": course.name,
-            "教师": course.teacher,
-            "选课人数": total_students,
-            "已评分人数": graded_students,
-            "平均分": round(avg_grade, 2),
-            "剩余名额": course.max_students - course.current_students
-        })
+        course_stat = {
+            "course_id": course.id,
+            "course_name": course.name,
+            "course_code": course.course_code,
+            "teacher_name": course.teacher.name if course.teacher else "未分配",
+            "total_students": total_students,
+            "graded_students": graded_students,
+            "average_grade": round(avg_grade, 2),
+            "capacity_usage": f"{(total_students/course.max_students*100):.1f}%"
+        }
+        stats.append(course_stat)
 
-    return create_excel_report(course_stats, "课程统计报表.xlsx")
+    return response(data=stats)
+
+@router.get("/student-performance")
+def get_student_performance(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "teacher"]:
+        return response(code=403, message="没有权限查看学生成绩统计")
+
+    students = db.query(models.Student).all()
+    performance = []
+
+    for student in students:
+        enrollments = student.enrollments
+        total_courses = len(enrollments)
+        completed_courses = len([e for e in enrollments if e.grade is not None])
+        total_credits = sum(e.course.credit for e in enrollments if e.grade is not None)
+
+        if completed_courses > 0:
+            gpa = sum(e.grade * e.course.credit for e in enrollments if e.grade is not None) / total_credits
+        else:
+            gpa = 0
+
+        student_perf = {
+            "student_id": student.student_id,
+            "name": student.name,
+            "class_name": student.class_name,
+            "total_courses": total_courses,
+            "completed_courses": completed_courses,
+            "total_credits": total_credits,
+            "gpa": round(gpa/20, 2)  # 转换为5分制
+        }
+        performance.append(student_perf)
+
+    return response(data=performance)
+
+@router.get("/teacher-workload")
+def get_teacher_workload(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        return response(code=403, message="只有管理员可以查看教师工作量")
+
+    teachers = db.query(models.Teacher).all()
+    workload = []
+
+    for teacher in teachers:
+        courses = teacher.courses
+        total_students = sum(course.current_students for course in courses)
+        total_credits = sum(course.credit for course in courses)
+
+        teacher_load = {
+            "teacher_id": teacher.teacher_id,
+            "name": teacher.name,
+            "department": teacher.department,
+            "title": teacher.title,
+            "course_count": len(courses),
+            "total_students": total_students,
+            "total_credits": total_credits
+        }
+        workload.append(teacher_load)
+
+    return response(data=workload)
+
+@router.get("/classroom-usage")
+def get_classroom_usage(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != "admin":
+        return response(code=403, message="只有管理员可以查看教室使用情况")
+
+    classrooms = db.query(models.Classroom).all()
+    usage_stats = []
+
+    for classroom in classrooms:
+        schedules = db.query(models.CourseSchedule).filter(
+            models.CourseSchedule.classroom_id == classroom.id
+        ).all()
+
+        # 计算每周使用课时数
+        total_hours = sum(
+            (datetime.strptime(s.end_time, "%H:%M") -
+             datetime.strptime(s.start_time, "%H:%M")).seconds / 3600
+            for s in schedules
+        )
+
+        usage_stat = {
+            "room_number": classroom.room_number,
+            "building": classroom.building,
+            "capacity": classroom.capacity,
+            "weekly_hours": round(total_hours, 1),
+            "schedule_count": len(schedules),
+            "has_projector": classroom.has_projector,
+            "has_computer": classroom.has_computer
+        }
+        usage_stats.append(usage_stat)
+
+    return response(data=usage_stats)
+
+@router.get("/enrollment-trends")
+def get_enrollment_trends(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role not in ["admin", "teacher"]:
+        return response(code=403, message="没有权限查看选课趋势")
+
+    courses = db.query(models.Course).all()
+    trends = []
+
+    for course in courses:
+        # 如果是教师，只能查看自己的课程
+        if current_user.role == "teacher" and course.teacher_id != current_user.id:
+            continue
+
+        course_trend = {
+            "course_id": course.id,
+            "course_name": course.name,
+            "course_code": course.course_code,
+            "max_students": course.max_students,
+            "current_students": course.current_students,
+            "enrollment_rate": f"{(course.current_students/course.max_students*100):.1f}%",
+            "remaining_seats": course.max_students - course.current_students
+        }
+        trends.append(course_trend)
+
+    return response(data=trends)

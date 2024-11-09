@@ -156,3 +156,17 @@ class Notification(NotificationBase):
 
     class Config:
         from_attributes = True
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserInfo(BaseModel):
+    id: int
+    username: str
+    email: str
+    role: str
+    student_id: Optional[str] = None
+
+class TokenWithUserInfo(Token):
+    user: UserInfo
