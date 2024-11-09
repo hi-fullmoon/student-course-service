@@ -5,8 +5,6 @@ from ..database import get_db
 from ..models import models
 from ..schemas import schemas
 from ..utils.auth import (
-    verify_password,
-    get_password_hash,
     create_access_token,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
@@ -24,11 +22,10 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     if db_user:
         return response(code=400, message="邮箱已被注册")
 
-    hashed_password = get_password_hash(user.password)
     db_user = models.User(
         username=user.username,
         email=user.email,
-        hashed_password=hashed_password,
+        password=user.password,
         role=user.role,
         student_id=user.student_id
     )
@@ -49,7 +46,7 @@ async def login(
     db: Session = Depends(get_db)
 ):
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or form_data.password != user.password:
         return response(code=401, message="用户名或密码错误")
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

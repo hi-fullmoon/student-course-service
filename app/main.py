@@ -6,12 +6,26 @@ from .routers import (
     students, courses, enrollments, auth, reports,
     teachers, classrooms, schedules, reviews, notifications, admin
 )
-from .utils.init_db import init_database
+from sqlalchemy_utils import database_exists, create_database
 from .utils.logger import system_logger
 from .utils.response import response
+from .utils.init_db import init_database
 
-init_database()
-models.Base.metadata.create_all(bind=engine)
+def initialize_database():
+    """初始化数据库：确保数据库存在、创建表结构并初始化基础数据"""
+    if not database_exists(engine.url):
+        create_database(engine.url)
+        system_logger.info(f"Database {engine.url.database} created successfully")
+
+    # 创建数据库表
+    models.Base.metadata.create_all(bind=engine)
+
+    # 初始化基础数据
+    init_database()
+    system_logger.info("Database initialization completed")
+
+# 执行数据库初始化
+initialize_database()
 
 app = FastAPI(title="选修课管理系统")
 

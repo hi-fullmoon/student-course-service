@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, DateTime
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, DateTime, Text
 from sqlalchemy.orm import relationship
 from ..database import Base
 from datetime import datetime
@@ -49,11 +49,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    password = Column(String(32), nullable=False)
     email = Column(String(100), unique=True, index=True)
-    hashed_password = Column(String(100))
+    role = Column(String(20), nullable=False)
     is_active = Column(Boolean, default=True)
-    role = Column(String(20))
     student_id = Column(Integer, ForeignKey("students.id"), nullable=True)
     notifications = relationship("Notification", back_populates="user")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

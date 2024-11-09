@@ -1,79 +1,35 @@
-import pymysql
-from ..config import get_settings
-from passlib.context import CryptContext
-import logging
-
-# 创建密码加密工具
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from ..database import SessionLocal
+from ..models import models
+import hashlib
+from ..utils.logger import system_logger
 
 def init_database():
-    settings = get_settings()
+    """初始化数据库，包括创建管理员用户等初始化操作"""
+    init_admin()
 
-    # 连接MySQL服务器
-    conn = pymysql.connect(
-        host=settings.DB_HOST,
-        user=settings.DB_USER,
-        password=settings.DB_PASSWORD,
-        charset='utf8mb4'
-    )
-    cursor = conn.cursor()
+def get_md5_password(password: str) -> str:
+    """使用MD5加密密码"""
+    return hashlib.md5(password.encode()).hexdigest()
 
-    # 创建数据库
-    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {settings.DB_NAME}")
-    cursor.execute(f"USE {settings.DB_NAME}")
-
-    # 设置字符集
-    cursor.execute("ALTER DATABASE `{}` CHARACTER SET 'utf8mb4' COLLATE 'utf8mb4_unicode_ci'".format(
-        settings.DB_NAME
-    ))
-
-    # 创建用户表
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            hashed_password VARCHAR(255) NOT NULL,
-            email VARCHAR(100) UNIQUE NOT NULL,
-            role VARCHAR(20) NOT NULL,
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
-    """)
-
-    # 检查是否存在管理员账号
-    cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'ADMIN'")
-    admin_count = cursor.fetchone()[0]
-
-    # 如果不存在管理员账号，创建一个默认管理员
-    if admin_count == 0:
-        default_admin = {
-            'username': 'admin',
-            'hashed_password': pwd_context.hash('admin123'),  # 默认密码
-            'email': 'admin@example.com',
-            'role': 'ADMIN',
-            'is_active': 1
-        }
-
-        try:
-            cursor.execute("""
-                INSERT INTO users (username, hashed_password, email, role, is_active)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (
-                default_admin['username'],
-                default_admin['hashed_password'],
-                default_admin['email'],
-                default_admin['role'],
-                default_admin['is_active']
-            ))
-            conn.commit()
-            logging.info("Default admin account created successfully")
-        except Exception as e:
-            logging.error(f"Error creating admin account: {str(e)}")
-            conn.rollback()
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-if __name__ == "__main__":
-    init_database()
+def init_admin():
+    """初始化管理员用户"""
+    try:
+        db = SessionLocal()
+        # 检查是否已存在管理员用户
+        admin_user = db.query(models.User).filter(models.User.username == "admin").first()
+        if not admin_user:
+            # 创建管理员用户
+            admin_user = models.User(
+                username="admin",
+                password=get_md5_password("admin123"),  # 使用MD5加密密码
+                role="admin",
+                is_active=True,
+                email="admin@example.com"
+            )
+            db.add(admin_user)
+            db.commit()
+            system_logger.info("管理员用户初始化成功")
+        db.close()
+    except Exception as e:
+        system_logger.error(f"初始化管理员用户失败: {str(e)}")
+        raise e
