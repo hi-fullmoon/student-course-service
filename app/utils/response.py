@@ -2,6 +2,9 @@ from typing import Generic, TypeVar, Optional
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from fastapi import status
+from datetime import datetime
+from decimal import Decimal
+from typing import Any
 
 T = TypeVar('T')
 
@@ -29,3 +32,25 @@ def response_error(*, code: int = 400, message: str = "Bad Request") -> JSONResp
             "data": None
         }
     )
+
+def model_to_dict(model: Any) -> dict:
+    """
+    将 SQLAlchemy 模型对象转换为字典
+
+    Args:
+        model: SQLAlchemy 模型实例
+
+    Returns:
+        dict: 包含模型属性的字典
+    """
+    result = {}
+    for column in model.__table__.columns:
+        value = getattr(model, column.name)
+        # 处理不同类型的值
+        if isinstance(value, datetime):
+            result[column.name] = value.strftime('%Y-%m-%d %H:%M:%S')
+        elif isinstance(value, Decimal):
+            result[column.name] = float(value)
+        else:
+            result[column.name] = value
+    return result

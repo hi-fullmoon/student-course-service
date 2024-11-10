@@ -28,8 +28,6 @@ async def login(login_data: LoginData, db: Session = Depends(get_db)):
         "user_info": {
             "id": student.id,
             "username": student.username,
-            "email": student.email,
-            "gender": student.gender
         }
     })
 
@@ -40,5 +38,8 @@ async def get_current_user(current_user: StudentModel = Depends(get_current_user
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
-        "gender": current_user.gender
+        "gender": current_user.gender,
+        "student_number": current_user.student_number,
+        "class_name": current_user.class_name,
+        "enrollment_date": current_user.enrollment_date.isoformat() if current_user.enrollment_date else None
     })

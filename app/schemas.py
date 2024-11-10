@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -66,10 +66,48 @@ class CourseBase(BaseModel):
     end_time: datetime | None = None
 
 class CourseCreate(CourseBase):
-    pass
+    start_time: str  # 接收 YYYY-MM-dd 格式的字符串
+    end_time: str    # 接收 YYYY-MM-dd 格式的字符串
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def validate_date(cls, v: str) -> datetime:
+        try:
+            # 将字符串转换为 datetime 对象
+            return datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError('日期格式必须为 YYYY-MM-DD')
+
+    @field_validator('end_time')
+    @classmethod
+    def validate_end_time(cls, v: datetime, info) -> datetime:
+        if 'start_time' in info.data:
+            start_time = info.data['start_time']
+            if isinstance(start_time, datetime) and v < start_time:
+                raise ValueError('结束时间不能早于开始时间')
+        return v
 
 class CourseUpdate(CourseBase):
-    pass
+    start_time: str  # 接收 YYYY-MM-dd 格式的字符串
+    end_time: str    # 接收 YYYY-MM-dd 格式的字符串
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def validate_date(cls, v: str) -> datetime:
+        try:
+            # 将字符串转换为 datetime 对象
+            return datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError('日期格式必须为 YYYY-MM-DD')
+
+    @field_validator('end_time')
+    @classmethod
+    def validate_end_time(cls, v: datetime, info) -> datetime:
+        if 'start_time' in info.data:
+            start_time = info.data['start_time']
+            if isinstance(start_time, datetime) and v < start_time:
+                raise ValueError('结束时间不能早于开始时间')
+        return v
 
 class Course(CourseBase):
     id: int
