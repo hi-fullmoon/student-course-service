@@ -1,67 +1,44 @@
-from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from ..database import get_db
-from ..models import models
-from ..schemas import schemas
-from ..utils.auth import (
-    create_access_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES
-)
-from ..utils.response import response
+from datetime import timedelta
+from app.utils.auth import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES, get_current_user
+from app.models import StudentModel
+from app.utils.init_db import get_db
+from app.utils.response import response_success, response_error
+from app.schemas import LoginData
 
 router = APIRouter()
 
-@router.post("/register")
-def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.username == user.username).first()
-    if db_user:
-        return response(code=400, message="用户名已被注册")
-
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if db_user:
-        return response(code=400, message="邮箱已被注册")
-
-    db_user = models.User(
-        username=user.username,
-        email=user.email,
-        password=user.password,
-        role=user.role,
-        student_id=user.student_id
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-
-    return response(data={
-        "id": db_user.id,
-        "username": db_user.username,
-        "email": db_user.email,
-        "role": db_user.role
-    })
-
 @router.post("/login")
-async def login(
-    form_data: schemas.UserLogin,
-    db: Session = Depends(get_db)
-):
-    user = db.query(models.User).filter(models.User.username == form_data.username).first()
-    if not user or form_data.password != user.password:
-        return response(code=401, message="用户名或密码错误")
+async def login(login_data: LoginData, db: Session = Depends(get_db)):
+    student = db.query(StudentModel).filter(StudentModel.username == login_data.username).first()
+    if not student or not verify_password(login_data.password, student.password):
+        return response_error(message="用户名或密码错误")
+
+    if not student.is_active:
+        return response_error(message="该账号已被禁用")
 
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": student.username}, expires_delta=access_token_expires
     )
-
-    return response(data={
+    return response_success(data={
         "access_token": access_token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "role": user.role,
-            "student_id": user.student_id
+        "user_info": {
+            "id": student.id,
+            "username": student.username,
+            "email": student.email,
+            "gender": student.gender
         }
+    })
+
+# 获取当前用户信息
+@router.get("/current_user")
+async def get_current_user(current_user: StudentModel = Depends(get_current_user)):
+    return response_success(data={
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "gender": current_user.gender
     })

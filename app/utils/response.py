@@ -1,35 +1,31 @@
-from typing import Any, Optional
+from typing import Generic, TypeVar, Optional
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from fastapi import status
 
-class ResponseModel:
-    def __init__(
-        self,
-        code: int = 200,
-        message: str = "success",
-        data: Any = None
-    ):
-        self.code = code
-        self.message = message
-        self.data = data
+T = TypeVar('T')
 
-    def dict(self):
-        return {
-            "code": self.code,
-            "message": self.message,
-            "data": self.data
-        }
+class ResponseModel(BaseModel, Generic[T]):
+    code: int = 200
+    message: str = "Success"
+    data: Optional[T] = None
 
-def response(
-    *,
-    code: int = 200,
-    data: Any = None,
-    message: str = "success"
-) -> JSONResponse:
+def response_success(*, data: any = None, message: str = "Success") -> JSONResponse:
     return JSONResponse(
-        status_code=200,  # HTTP状态码总是200
-        content=ResponseModel(
-            code=code,
-            message=message,
-            data=data
-        ).dict()
+        status_code=status.HTTP_200_OK,
+        content={
+            "code": 200,
+            "message": message,
+            "data": data
+        }
+    )
+
+def response_error(*, code: int = 400, message: str = "Bad Request") -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "code": code,
+            "message": message,
+            "data": None
+        }
     )

@@ -1,72 +1,65 @@
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from .database import engine
-from .models import models
-from .routers import (
-    students, courses, enrollments, auth, reports,
-    teachers, classrooms, schedules, reviews, notifications, admin
-)
-from sqlalchemy_utils import database_exists, create_database
-from .utils.logger import system_logger
-from .utils.response import response
-from .utils.init_db import init_database
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends, Request
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from app.routers import auth, courses, schedules, students
+from app.utils.init_db import init_database
+from app.utils.auth import oauth2_scheme
+from app.utils.response import response_error
 
-def initialize_database():
-    """初始化数据库：确保数据库存在、创建表结构并初始化基础数据"""
-    if not database_exists(engine.url):
-        create_database(engine.url)
-        system_logger.info(f"Database {engine.url.database} created successfully")
-
-    # 创建数据库表
-    models.Base.metadata.create_all(bind=engine)
-
-    # 初始化基础数据
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     init_database()
-    system_logger.info("Database initialization completed")
+    yield
 
-# 执行数据库初始化
-initialize_database()
-
-app = FastAPI(title="选修课管理系统")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="学生选课系统",
+    lifespan=lifespan
 )
+
+# 全局异常处理
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return response_error(
+        code=exc.status_code,
+        message=str(exc.detail)
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return response_error(
+        code=422,
+        message=str(exc.errors())
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    system_logger.error(f"Global error: {str(exc)}", exc_info=True)
-    return response(code=500, message="服务器内部错误")
+    return response_error(
+        code=500,
+        message=str(exc)
+    )
 
-app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
-app.include_router(students.router, prefix="/api/students", tags=["students"])
-app.include_router(teachers.router, prefix="/api/teachers", tags=["teachers"])
-app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
-app.include_router(classrooms.router, prefix="/api/classrooms", tags=["classrooms"])
-app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"])
-app.include_router(enrollments.router, prefix="/api/enrollments", tags=["enrollments"])
-app.include_router(reviews.router, prefix="/api/reviews", tags=["reviews"])
-app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
-app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
-app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+# 注册路由
+app.include_router(auth.router, prefix="/api", tags=["认证"])
+app.include_router(
+    courses.router,
+    prefix="/api",
+    tags=["课程管理"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+app.include_router(
+    students.router,
+    prefix="/api",
+    tags=["学生管理"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+app.include_router(
+    schedules.router,
+    prefix="/api",
+    tags=["课程表"],
+    dependencies=[Depends(oauth2_scheme)]
+)
 
 @app.get("/")
 async def root():
-    return {
-        "message": "欢迎使用选修课管理系统",
-        "version": "1.0.0",
-        "docs_url": "/docs",
-        "redoc_url": "/redoc"
-    }
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    return {"message": "欢迎使用学生选课系统"}

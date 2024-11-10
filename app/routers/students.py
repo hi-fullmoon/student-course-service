@@ -1,119 +1,167 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import List
 from sqlalchemy.orm import Session
-from ..database import get_db
-from ..models import models
-from ..schemas import schemas
-from ..utils.auth import get_current_user
-from ..utils.response import response
+from app.models import StudentModel
+from app.schemas import StudentCreate, StudentUpdate
+from app.utils.auth import get_current_user
+from app.utils.response import response_success
+from app.utils.init_db import get_db
+from datetime import datetime, timezone
+from sqlalchemy import and_
 
 router = APIRouter()
 
-@router.get("/")
-def get_students(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+@router.post("/students")
+async def create_student(
+    student: StudentCreate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
-    if current_user.role not in ["admin", "teacher"]:
-        return response(code=403, message="没有权限访问")
+    # 检查权限（只有管理员可以创建学生）
+    if current_user.username != "admin":
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
 
-    students = db.query(models.Student).offset(skip).limit(limit).all()
-    return response(data=students)
+    # 检查用户名是否已存在
+    existing_student = db.query(StudentModel).filter(
+        StudentModel.username == student.username
+    ).first()
+    if existing_student:
+        raise HTTPException(status_code=400, detail="该用户名已存在")
 
-@router.get("/{student_id}")
-def get_student(
-    student_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    if not student:
-        return response(code=404, message="学生不存在")
-    return response(data=student)
-
-@router.post("/")
-def create_student(
-    student: schemas.StudentCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        return response(code=403, message="没有权限创建学生")
-
-    db_student = models.Student(**student.dict())
-    db.add(db_student)
-    db.commit()
-    db.refresh(db_student)
-    return response(data=db_student)
-
-@router.put("/{student_id}")
-def update_student(
-    student_id: int,
-    student_update: schemas.StudentCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        return response(code=403, message="没有权限修改学生信息")
-
-    db_student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    if not db_student:
-        return response(code=404, message="学生不存在")
-
-    for key, value in student_update.dict().items():
-        setattr(db_student, key, value)
-
-    db.commit()
-    db.refresh(db_student)
-    return response(data=db_student)
-
-@router.delete("/{student_id}")
-def delete_student(
-    student_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    if current_user.role != "admin":
-        return response(code=403, message="没有权限删除学生")
-
-    db_student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    if not db_student:
-        return response(code=404, message="学生不存在")
-
-    db.delete(db_student)
-    db.commit()
-    return response(message="删除成功")
-
-@router.get("/{student_id}/courses")
-def get_student_courses(
-    student_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    if not student:
-        return response(code=404, message="学生不存在")
-
-    if current_user.role not in ["admin", "teacher"] and current_user.student_id != student_id:
-        return response(code=403, message="没有权限查看其他学生的课程")
-
-    enrollments = db.query(models.Enrollment).filter(
-        models.Enrollment.student_id == student_id
-    ).all()
-
-    courses = []
-    for enrollment in enrollments:
-        course = db.query(models.Course).filter(
-            models.Course.id == enrollment.course_id
+    # 检查邮箱是否已存在
+    if student.email:
+        existing_email = db.query(StudentModel).filter(
+            StudentModel.email == student.email
         ).first()
-        if course:
-            course_data = {
-                "id": course.id,
-                "name": course.name,
-                "credit": course.credit,
-                "grade": enrollment.grade
-            }
-            courses.append(course_data)
+        if existing_email:
+            raise HTTPException(status_code=400, detail="该邮箱已被使用")
 
-    return response(data=courses)
+    # 生成学号
+    student_number = StudentModel.generate_student_number(db)
+
+    # 创建新学生
+    new_student = StudentModel(
+        username=student.username,
+        student_number=student_number,  # 使用生成的学号
+        email=student.email,
+        gender=student.gender,
+        class_name=student.class_name,
+        enrollment_date=student.enrollment_date or datetime.now(timezone.utc),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db.add(new_student)
+    db.commit()
+    db.refresh(new_student)
+
+    return response_success(data={
+        "id": new_student.id,
+        "student_number": new_student.student_number
+    })
+
+@router.get("/students")
+async def list_students(
+    username: str = Query(default=None, description="用户名模糊搜索"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 检查权限
+    if current_user.username != "admin":
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
+
+    # 构建查询
+    query = db.query(StudentModel).filter(StudentModel.username != "admin")
+
+    # 如果提供了username参数，添加模糊查询条件
+    if username:
+        query = query.filter(StudentModel.username.like(f"%{username}%"))
+
+    students = query.all()
+
+    return response_success(data=[{
+        "id": student.id,
+        "username": student.username,
+        "email": student.email,
+        "gender": student.gender,
+        "student_number": student.student_number,
+        "class_name": student.class_name,
+        "enrollment_date": student.enrollment_date.isoformat() if student.enrollment_date else None
+    } for student in students])
+
+@router.get("/students/{student_id}")
+async def get_student(
+    student_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 检查权限
+    if current_user.username != "admin" and current_user.id != student_id:
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
+
+    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    return response_success(data={
+        "id": student.id,
+        "username": student.username,
+        "email": student.email,
+        "gender": student.gender,
+        "is_active": student.is_active
+    })
+
+@router.put("/students/{student_id}")
+async def update_student(
+    student_id: int,
+    student_update: StudentUpdate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 检查权限
+    if current_user.username != "admin":
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
+
+    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    # 检查邮箱是否已被其他用户使用
+    if student_update.email:
+        existing_email = db.query(StudentModel).filter(
+            and_(
+                StudentModel.email == student_update.email,
+                StudentModel.id != student_id
+            )
+        ).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="该邮箱已被使用")
+
+    # 更新学生信息
+    update_data = student_update.model_dump(exclude_unset=True)
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc)
+        for key, value in update_data.items():
+            setattr(student, key, value)
+        db.commit()
+
+    return response_success()
+
+@router.delete("/students/{student_id}")
+async def delete_student(
+    student_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 检查权限
+    if current_user.username != "admin":
+        raise HTTPException(status_code=403, detail="没有权限执行此操作")
+
+    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    # 物理删除学生记录
+    db.delete(student)
+    db.commit()
+
+    return response_success()
