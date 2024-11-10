@@ -1,8 +1,8 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Enum
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Enum, Time
 from sqlalchemy.orm import relationship
+from app.schemas import Gender, Semester
 from app.utils.init_db import Base
 import datetime
-import enum
 import hashlib
 from datetime import timezone
 from sqlalchemy import event, func
@@ -11,10 +11,6 @@ from sqlalchemy.orm import Session
 def get_default_password():
     """返回默认密码123456的MD5值"""
     return hashlib.md5("123456".encode()).hexdigest()
-
-class Gender(int, enum.Enum):
-    MALE = 1
-    FEMALE = 0
 
 class StudentModel(Base):
     __tablename__ = "students"
@@ -65,10 +61,13 @@ class CourseModel(Base):
     max_student_num = Column(Integer)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc), onupdate=lambda: datetime.datetime.now(timezone.utc))
-    start_time = Column(DateTime(timezone=True), nullable=True, comment="课程开始时间")
-    end_time = Column(DateTime(timezone=True), nullable=True, comment="课程结束时间")
+    start_date = Column(DateTime(timezone=True), nullable=True, comment="课程开始日期")
+    end_date = Column(DateTime(timezone=True), nullable=True, comment="课程结束日期")
+    academic_year = Column(Integer, nullable=True, comment="学年")
+    semester = Column(Enum(Semester), nullable=True, comment="学期")
 
     students = relationship("StudentCourseModel", back_populates="course")
+    schedules = relationship("CourseScheduleModel", back_populates="course")
 
 class StudentCourseModel(Base):
     __tablename__ = "student_courses"
@@ -80,3 +79,14 @@ class StudentCourseModel(Base):
 
     student = relationship("StudentModel", back_populates="courses")
     course = relationship("CourseModel", back_populates="students")
+
+class CourseScheduleModel(Base):
+    __tablename__ = "course_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    course_id = Column(Integer, ForeignKey("courses.id"))
+    weekday = Column(Integer)  # 0-6 表示周一到周日
+    start_time = Column(Time)
+    end_time = Column(Time)
+
+    course = relationship("CourseModel", back_populates="schedules")

@@ -12,7 +12,6 @@ router = APIRouter()
 @router.post("/login")
 async def login(login_data: LoginData, db: Session = Depends(get_db)):
     student = db.query(StudentModel).filter(StudentModel.username == login_data.username).first()
-    print(student, 'xxx')
     if not student or not verify_password(login_data.password, student.password):
         return response_error(message="用户名或密码错误")
 

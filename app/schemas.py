@@ -1,11 +1,15 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 
 class Gender(int, Enum):
     MALE = 1
     FEMALE = 0
+
+class Semester(int, Enum):
+    FIRST = 1
+    SECOND = 2
 
 class ClassBase(BaseModel):
     name: str
@@ -62,51 +66,76 @@ class CourseBase(BaseModel):
     teacher: str
     credits: int
     max_student_num: int
-    start_time: datetime | None = None
-    end_time: datetime | None = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+class SemesterEnum(str, Enum):
+    FIRST = "1"
+    SECOND = "2"
 
 class CourseCreate(CourseBase):
-    start_time: str  # 接收 YYYY-MM-dd 格式的字符串
-    end_time: str    # 接收 YYYY-MM-dd 格式的字符串
+    academic_year: Optional[int] = None
+    semester: Optional[Semester] = None
 
-    @field_validator('start_time', 'end_time')
+    @field_validator('start_date', 'end_date')
     @classmethod
-    def validate_date(cls, v: str) -> datetime:
+    def validate_date(cls, v: Optional[str]) -> Optional[date]:
+        if v is None:
+            return None
         try:
-            # 将字符串转换为 datetime 对象
-            return datetime.strptime(v, '%Y-%m-%d')
+            if isinstance(v, str):
+                return datetime.strptime(v, '%Y-%m-%d').date()
+            return v
         except ValueError:
             raise ValueError('日期格式必须为 YYYY-MM-DD')
 
-    @field_validator('end_time')
+    @field_validator('end_date')
     @classmethod
-    def validate_end_time(cls, v: datetime, info) -> datetime:
-        if 'start_time' in info.data:
-            start_time = info.data['start_time']
-            if isinstance(start_time, datetime) and v < start_time:
-                raise ValueError('结束时间不能早于开始时间')
+    def validate_end_date(cls, v: Optional[date], info) -> Optional[date]:
+        if v is not None and 'start_date' in info.data:
+            start_date = info.data['start_date']
+            if isinstance(start_date, date) and v < start_date:
+                raise ValueError('结束日期不能早于开始日期')
+        return v
+
+    @field_validator('academic_year')
+    @classmethod
+    def validate_academic_year(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 1900:
+            raise ValueError('学年必须大于1900')
         return v
 
 class CourseUpdate(CourseBase):
-    start_time: str  # 接收 YYYY-MM-dd 格式的字符串
-    end_time: str    # 接收 YYYY-MM-dd 格式的字符串
+    code: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    teacher: Optional[str] = None
+    credits: Optional[int] = None
+    max_student_num: Optional[int] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    academic_year: Optional[int] = None
+    semester: Optional[Semester] = None
 
-    @field_validator('start_time', 'end_time')
+    @field_validator('start_date', 'end_date')
     @classmethod
-    def validate_date(cls, v: str) -> datetime:
+    def validate_date(cls, v: Optional[str]) -> Optional[date]:
+        if v is None:
+            return None
         try:
-            # 将字符串转换为 datetime 对象
-            return datetime.strptime(v, '%Y-%m-%d')
+            if isinstance(v, str):
+                return datetime.strptime(v, '%Y-%m-%d').date()
+            return v
         except ValueError:
             raise ValueError('日期格式必须为 YYYY-MM-DD')
 
-    @field_validator('end_time')
+    @field_validator('end_date')
     @classmethod
-    def validate_end_time(cls, v: datetime, info) -> datetime:
-        if 'start_time' in info.data:
-            start_time = info.data['start_time']
-            if isinstance(start_time, datetime) and v < start_time:
-                raise ValueError('结束时间不能早于开始时间')
+    def validate_end_date(cls, v: Optional[date], info) -> Optional[date]:
+        if v is not None and 'start_date' in info.data:
+            start_date = info.data['start_date']
+            if isinstance(start_date, date) and v < start_date:
+                raise ValueError('结束日期不能早于开始日期')
         return v
 
 class Course(CourseBase):

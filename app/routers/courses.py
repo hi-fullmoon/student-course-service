@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, Query, Security
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-from app.models import CourseModel, StudentCourseModel, StudentModel
+from app.models import CourseModel, Semester, StudentCourseModel, StudentModel, CourseScheduleModel
 from app.schemas import CourseCreate, CourseUpdate
 from app.utils.init_db import get_db
-from app.utils.auth import oauth2_scheme, get_current_user
+from app.utils.auth import get_current_user
 from app.utils.response import response_success, response_error, model_to_dict
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -30,8 +31,10 @@ def get_courses(
     name: Optional[str] = Query(None, description="课程名称"),
     code: Optional[str] = Query(None, description="课程代码"),
     teacher: Optional[str] = Query(None, description="教师姓名"),
-    start_time: Optional[str] = Query(None, description="开始时间 (YYYY-MM-DD)"),
-    end_time: Optional[str] = Query(None, description="结束时间 (YYYY-MM-DD)"),
+    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
+    academic_year: Optional[int] = Query(None, description="学年"),
+    semester: Optional[Semester] = Query(None, description="学期 (1 或 2)"),
     db: Session = Depends(get_db)
 ):
     query = db.query(CourseModel)
@@ -42,27 +45,62 @@ def get_courses(
         query = query.filter(CourseModel.code.like(f"%{code}%"))
     if teacher:
         query = query.filter(CourseModel.teacher.like(f"%{teacher}%"))
+    if academic_year:
+        query = query.filter(CourseModel.academic_year == academic_year)
+    if semester:
+        query = query.filter(CourseModel.semester == semester)
 
     try:
-        if start_time:
-            start_date = datetime.strptime(start_time, "%Y-%m-%d")
-            query = query.filter(CourseModel.start_time >= start_date)
-        if end_time:
-            end_date = datetime.strptime(end_time, "%Y-%m-%d")
-            query = query.filter(CourseModel.end_time <= end_date)
+        if start_date:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(CourseModel.start_date >= start)
+        if end_date:
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+            query = query.filter(CourseModel.end_date <= end)
     except ValueError:
         return response_error(message="日期格式错误，请使用 YYYY-MM-DD 格式")
 
     courses = query.all()
-    return response_success(data=[model_to_dict(course) for course in courses])
+
+    course_data = []
+    for course in courses:
+        # 获取课程的时间安排
+        schedules = db.query(CourseScheduleModel).filter(
+            CourseScheduleModel.course_id == course.id
+        ).all()
+
+        # 转换课程基本信息
+        course_info = model_to_dict(course)
+
+        # 添加时间安排信息
+        course_info["schedules"] = [{
+            "weekday": schedule.weekday,
+            "start_time": schedule.start_time.strftime("%H:%M"),
+            "end_time": schedule.end_time.strftime("%H:%M")
+        } for schedule in schedules]
+
+        # 获取已选课人数
+        enrolled_count = db.query(StudentCourseModel).filter(
+            StudentCourseModel.course_id == course.id
+        ).count()
+
+        # 添加选课信息
+        course_info.update({
+            "enrolled_count": enrolled_count,
+            "remaining_slots": course.max_student_num - enrolled_count
+        })
+
+        course_data.append(course_info)
+
+    return response_success(data=course_data)
 
 @router.get("/courses/my-selection")
 def get_my_course_selection(
     name: Optional[str] = Query(None, description="课程名称"),
     code: Optional[str] = Query(None, description="课程代码"),
     teacher: Optional[str] = Query(None, description="教师姓名"),
-    start_time: Optional[str] = Query(None, description="开始时间 (YYYY-MM-DD)"),
-    end_time: Optional[str] = Query(None, description="结束时间 (YYYY-MM-DD)"),
+    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     is_enrolled: Optional[int] = Query(None, description="选课状态：1-已选，0-未选"),
     db: Session = Depends(get_db),
     current_user: StudentModel = Security(get_current_user)
@@ -93,12 +131,12 @@ def get_my_course_selection(
             query = query.filter(CourseModel.teacher.like(f"%{teacher}%"))
 
         try:
-            if start_time:
-                start_date = datetime.strptime(start_time, "%Y-%m-%d")
-                query = query.filter(CourseModel.start_time >= start_date)
-            if end_time:
-                end_date = datetime.strptime(end_time, "%Y-%m-%d")
-                query = query.filter(CourseModel.end_time <= end_date)
+            if start_date:
+                start = datetime.strptime(start_date, "%Y-%m-%d")
+                query = query.filter(CourseModel.start_date >= start)
+            if end_date:
+                end = datetime.strptime(end_date, "%Y-%m-%d")
+                query = query.filter(CourseModel.end_date <= end)
         except ValueError:
             return response_error(message="日期格式错误，请使用 YYYY-MM-DD 格式")
 
@@ -160,6 +198,58 @@ def enroll_course(
     if current_students >= course.max_student_num:
         return response_error(message="课程已满")
 
+    # 检查时间冲突
+    course_schedules = db.query(CourseScheduleModel).filter(
+        CourseScheduleModel.course_id == course_id
+    ).all()
+
+    if course_schedules:
+        # 获取学生已选课程的时间安排
+        enrolled_courses = db.query(StudentCourseModel).filter(
+            StudentCourseModel.student_id == current_user.id
+        ).all()
+        enrolled_course_ids = [ec.course_id for ec in enrolled_courses]
+
+        weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        conflicts = []
+
+        existing_schedules = db.query(CourseScheduleModel, CourseModel).join(
+            CourseModel
+        ).filter(
+            CourseScheduleModel.course_id.in_(enrolled_course_ids)
+        ).all()
+
+        # 检查每个时间段是否有冲突
+        for new_schedule in course_schedules:
+            for existing_schedule, existing_course in existing_schedules:
+                if (new_schedule.weekday == existing_schedule.weekday and
+                    new_schedule.start_time < existing_schedule.end_time and
+                    new_schedule.end_time > existing_schedule.start_time):
+                    conflicts.append({
+                        "weekday": weekday_names[new_schedule.weekday],
+                        "conflict_course": existing_course.name,
+                        "conflict_time": f"{existing_schedule.start_time.strftime('%H:%M')}-{existing_schedule.end_time.strftime('%H:%M')}",
+                        "new_course_time": f"{new_schedule.start_time.strftime('%H:%M')}-{new_schedule.end_time.strftime('%H:%M')}"
+                    })
+
+        if conflicts:
+            conflict_messages = []
+            for conflict in conflicts:
+                message = (
+                    f"{conflict['weekday']} "
+                    f"{conflict['new_course_time']} 与课程 "
+                    f"《{conflict['conflict_course']}》"
+                    f"({conflict['conflict_time']}) 时间冲突"
+                )
+                conflict_messages.append(message)
+
+            return response_error(
+                message="课程时间冲突",
+                data={
+                    "conflicts": conflict_messages
+                }
+            )
+
     try:
         # 创建选课记录
         new_enrollment = StudentCourseModel(
@@ -170,6 +260,7 @@ def enroll_course(
         db.commit()
         return response_success(message="选课成功")
     except Exception as e:
+        db.rollback()
         return response_error(message=f"选课失败: {str(e)}")
 
 @router.put("/courses/{course_id}")
