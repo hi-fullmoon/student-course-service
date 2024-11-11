@@ -1,26 +1,33 @@
-from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, List
-from datetime import datetime, date
+from datetime import date, datetime, time
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, EmailStr, field_validator
+
 
 class Gender(int, Enum):
     MALE = 1
     FEMALE = 0
 
+
 class Semester(int, Enum):
     FIRST = 1
     SECOND = 2
+
 
 class ClassBase(BaseModel):
     name: str
     grade: int
 
+
 class ClassCreate(ClassBase):
     pass
+
 
 class ClassUpdate(ClassBase):
     name: str | None = None
     grade: int | None = None
+
 
 class Class(ClassBase):
     id: int
@@ -30,6 +37,7 @@ class Class(ClassBase):
     class Config:
         from_attributes = True
 
+
 class StudentBase(BaseModel):
     username: str
     student_number: str | None = None
@@ -38,8 +46,10 @@ class StudentBase(BaseModel):
     email: EmailStr
     enrollment_date: datetime | None = None
 
+
 class StudentCreate(StudentBase):
     pass
+
 
 class StudentUpdate(StudentBase):
     student_number: str | None = None
@@ -49,15 +59,15 @@ class StudentUpdate(StudentBase):
     enrollment_date: datetime | None = None
     class_name: str | None = None
 
+
 class Student(StudentBase):
     id: int
     is_active: bool
 
     class Config:
         from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+        json_encoders = {datetime: lambda v: v.isoformat()}
+
 
 class CourseBase(BaseModel):
     code: str
@@ -69,41 +79,44 @@ class CourseBase(BaseModel):
     start_date: Optional[date] = None
     end_date: Optional[date] = None
 
+
 class SemesterEnum(str, Enum):
     FIRST = "1"
     SECOND = "2"
+
 
 class CourseCreate(CourseBase):
     academic_year: Optional[int] = None
     semester: Optional[Semester] = None
 
-    @field_validator('start_date', 'end_date')
+    @field_validator("start_date", "end_date")
     @classmethod
     def validate_date(cls, v: Optional[str]) -> Optional[date]:
         if v is None:
             return None
         try:
             if isinstance(v, str):
-                return datetime.strptime(v, '%Y-%m-%d').date()
+                return datetime.strptime(v, "%Y-%m-%d").date()
             return v
         except ValueError:
-            raise ValueError('日期格式必须为 YYYY-MM-DD')
+            raise ValueError("日期格式必须为 YYYY-MM-DD")
 
-    @field_validator('end_date')
+    @field_validator("end_date")
     @classmethod
     def validate_end_date(cls, v: Optional[date], info) -> Optional[date]:
-        if v is not None and 'start_date' in info.data:
-            start_date = info.data['start_date']
+        if v is not None and "start_date" in info.data:
+            start_date = info.data["start_date"]
             if isinstance(start_date, date) and v < start_date:
-                raise ValueError('结束日期不能早于开始日期')
+                raise ValueError("结束日期不能早于开始日期")
         return v
 
-    @field_validator('academic_year')
+    @field_validator("academic_year")
     @classmethod
     def validate_academic_year(cls, v: Optional[int]) -> Optional[int]:
         if v is not None and v < 1900:
-            raise ValueError('学年必须大于1900')
+            raise ValueError("学年必须大于1900")
         return v
+
 
 class CourseUpdate(CourseBase):
     code: Optional[str] = None
@@ -117,26 +130,27 @@ class CourseUpdate(CourseBase):
     academic_year: Optional[int] = None
     semester: Optional[Semester] = None
 
-    @field_validator('start_date', 'end_date')
+    @field_validator("start_date", "end_date")
     @classmethod
     def validate_date(cls, v: Optional[str]) -> Optional[date]:
         if v is None:
             return None
         try:
             if isinstance(v, str):
-                return datetime.strptime(v, '%Y-%m-%d').date()
+                return datetime.strptime(v, "%Y-%m-%d").date()
             return v
         except ValueError:
-            raise ValueError('日期格式必须为 YYYY-MM-DD')
+            raise ValueError("日期格式必须为 YYYY-MM-DD")
 
-    @field_validator('end_date')
+    @field_validator("end_date")
     @classmethod
     def validate_end_date(cls, v: Optional[date], info) -> Optional[date]:
-        if v is not None and 'start_date' in info.data:
-            start_date = info.data['start_date']
+        if v is not None and "start_date" in info.data:
+            start_date = info.data["start_date"]
             if isinstance(start_date, date) and v < start_date:
-                raise ValueError('结束日期不能早于开始日期')
+                raise ValueError("结束日期不能早于开始日期")
         return v
+
 
 class Course(CourseBase):
     id: int
@@ -145,6 +159,7 @@ class Course(CourseBase):
 
     class Config:
         from_attributes = True
+
 
 class Schedule(BaseModel):
     id: int
@@ -156,6 +171,18 @@ class Schedule(BaseModel):
     class Config:
         from_attributes = True
 
+
 class LoginData(BaseModel):
     username: str
     password: str
+
+
+class TimeSlot(BaseModel):
+    start_time: time
+    end_time: time
+    weekday: int  # 0-6 表示周一到周日
+
+
+class CourseScheduleCreate(BaseModel):
+    course_id: int
+    time_slots: List[TimeSlot]

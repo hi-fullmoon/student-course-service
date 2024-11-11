@@ -1,37 +1,33 @@
-from typing import Generic, TypeVar, Optional
-from pydantic import BaseModel
-from fastapi.responses import JSONResponse
-from fastapi import status
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Generic, Optional, TypeVar
 
-T = TypeVar('T')
+from fastapi import status
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+T = TypeVar("T")
+
 
 class ResponseModel(BaseModel, Generic[T]):
     code: int = 200
     message: str = "Success"
     data: Optional[T] = None
 
+
 def response_success(*, data: any = None, message: str = "Success") -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={
-            "code": 200,
-            "message": message,
-            "data": data
-        }
+        content={"code": 200, "message": message, "data": data},
     )
+
 
 def response_error(*, code: int = 400, message: str = "Bad Request") -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={
-            "code": code,
-            "message": message,
-            "data": None
-        }
+        content={"code": code, "message": message, "data": None},
     )
+
 
 def model_to_dict(model: Any) -> dict:
     """
@@ -48,7 +44,7 @@ def model_to_dict(model: Any) -> dict:
         value = getattr(model, column.name)
         # 处理不同类型的值
         if isinstance(value, datetime):
-            result[column.name] = value.strftime('%Y-%m-%d %H:%M:%S')
+            result[column.name] = value.strftime("%Y-%m-%d %H:%M:%S")
         elif isinstance(value, Decimal):
             result[column.name] = float(value)
         else:

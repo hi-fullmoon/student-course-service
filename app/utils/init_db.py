@@ -1,16 +1,20 @@
+import hashlib
+
+import mysql.connector
+from mysql.connector import Error
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
 from app.config import get_settings
-import mysql.connector
-from mysql.connector import Error
-import hashlib
 
 settings = get_settings()
+
 
 def get_password_md5(password: str) -> str:
     """使用MD5加密密码"""
     return hashlib.md5(password.encode()).hexdigest()
+
 
 def create_database_if_not_exists():
     try:
@@ -18,7 +22,7 @@ def create_database_if_not_exists():
             host=settings.DB_HOST,
             user=settings.DB_USER,
             password=settings.DB_PASSWORD,
-            port=settings.DB_PORT
+            port=settings.DB_PORT,
         )
 
         if conn.is_connected():
@@ -29,6 +33,7 @@ def create_database_if_not_exists():
 
     except Error as e:
         raise Exception(f"数据库初始化错误: {str(e)}")
+
 
 # 确保数据库存在
 create_database_if_not_exists()
@@ -41,10 +46,12 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+
 def init_database():
     # 导入 models 以确保所有模型都被注册
     Base.metadata.create_all(bind=engine)
     insert_admin_account()
+
 
 def get_db():
     db = SessionLocal()
@@ -52,6 +59,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 def insert_admin_account():
     from app.models import StudentModel  # 在函数内部导入
@@ -61,9 +69,7 @@ def insert_admin_account():
         admin = db.query(StudentModel).filter(StudentModel.username == "admin").first()
         if not admin:
             default_admin = StudentModel(
-                username="admin",
-                password=get_password_md5("admin123"),
-                is_active=True
+                username="admin", password=get_password_md5("admin123"), is_active=True
             )
             db.add(default_admin)
             db.commit()

@@ -1,38 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timezone
 from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
+
 from app.models import StudentModel
 from app.schemas import StudentCreate, StudentUpdate
 from app.utils.auth import get_current_user
-from app.utils.response import response_success, model_to_dict
 from app.utils.init_db import get_db
-from datetime import datetime, timezone
-from sqlalchemy import and_
+from app.utils.response import model_to_dict, response_success
 
 router = APIRouter()
+
 
 @router.post("/students")
 async def create_student(
     student: StudentCreate,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # 检查权限（只有管理员可以创建学生）
     if current_user.username != "admin":
         raise HTTPException(status_code=403, detail="没有权限执行此操作")
 
     # 检查用户名是否已存在
-    existing_student = db.query(StudentModel).filter(
-        StudentModel.username == student.username
-    ).first()
+    existing_student = (
+        db.query(StudentModel).filter(StudentModel.username == student.username).first()
+    )
     if existing_student:
         raise HTTPException(status_code=400, detail="该用户名已存在")
 
     # 检查邮箱是否已存在
     if student.email:
-        existing_email = db.query(StudentModel).filter(
-            StudentModel.email == student.email
-        ).first()
+        existing_email = (
+            db.query(StudentModel).filter(StudentModel.email == student.email).first()
+        )
         if existing_email:
             raise HTTPException(status_code=400, detail="该邮箱已被使用")
 
@@ -48,7 +51,7 @@ async def create_student(
         class_name=student.class_name,
         enrollment_date=(student.enrollment_date or datetime.now(timezone.utc)).date(),
         created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(new_student)
     db.commit()
@@ -56,13 +59,14 @@ async def create_student(
 
     return response_success(data=model_to_dict(new_student))
 
+
 @router.get("/students")
 async def list_students(
     username: str = Query(default=None, description="用户名模糊搜索"),
     student_number: str = Query(default=None, description="学号精确搜索"),
     email: str = Query(default=None, description="邮箱模糊搜索"),
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # 检查权限
     if current_user.username != "admin":
@@ -86,11 +90,12 @@ async def list_students(
     students = query.all()
     return response_success(data=[model_to_dict(student) for student in students])
 
+
 @router.get("/students/{student_id}")
 async def get_student(
     student_id: int,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # 检查权限
     if current_user.username != "admin" and current_user.id != student_id:
@@ -102,12 +107,13 @@ async def get_student(
 
     return response_success(data=model_to_dict(student))
 
+
 @router.put("/students/{student_id}")
 async def update_student(
     student_id: int,
     student_update: StudentUpdate,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # 检查权限
     if current_user.username != "admin":
@@ -119,12 +125,16 @@ async def update_student(
 
     # 检查邮箱是否已被其他用户使用
     if student_update.email:
-        existing_email = db.query(StudentModel).filter(
-            and_(
-                StudentModel.email == student_update.email,
-                StudentModel.id != student_id
+        existing_email = (
+            db.query(StudentModel)
+            .filter(
+                and_(
+                    StudentModel.email == student_update.email,
+                    StudentModel.id != student_id,
+                )
             )
-        ).first()
+            .first()
+        )
         if existing_email:
             raise HTTPException(status_code=400, detail="该邮箱已被使用")
 
@@ -139,11 +149,12 @@ async def update_student(
 
     return response_success(data=model_to_dict(student))
 
+
 @router.delete("/students/{student_id}")
 async def delete_student(
     student_id: int,
     current_user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     # 检查权限
     if current_user.username != "admin":

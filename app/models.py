@@ -1,16 +1,29 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, Enum, Time
-from sqlalchemy.orm import relationship
-from app.schemas import Gender, Semester
-from app.utils.init_db import Base
 import datetime
 import hashlib
 from datetime import timezone
-from sqlalchemy import event, func
-from sqlalchemy.orm import Session
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Time,
+    event,
+    func,
+)
+from sqlalchemy.orm import Session, relationship
+
+from app.schemas import Gender, Semester
+from app.utils.init_db import Base
+
 
 def get_default_password():
     """返回默认密码123456的MD5值"""
     return hashlib.md5("123456".encode()).hexdigest()
+
 
 class StudentModel(Base):
     __tablename__ = "students"
@@ -25,7 +38,11 @@ class StudentModel(Base):
     enrollment_date = Column(DateTime(timezone=True), nullable=True, comment="入学时间")
     class_name = Column(String(50), nullable=True, comment="班级名称")
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc), onupdate=lambda: datetime.datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.datetime.now(timezone.utc),
+        onupdate=lambda: datetime.datetime.now(timezone.utc),
+    )
 
     courses = relationship("StudentCourseModel", back_populates="student")
 
@@ -35,9 +52,12 @@ class StudentModel(Base):
         current_year = datetime.datetime.now().year
 
         # 查询当前年份最大的学号
-        latest_student = db.query(cls).filter(
-            cls.student_number.like(f"{current_year}%")
-        ).order_by(cls.student_number.desc()).first()
+        latest_student = (
+            db.query(cls)
+            .filter(cls.student_number.like(f"{current_year}%"))
+            .order_by(cls.student_number.desc())
+            .first()
+        )
 
         if latest_student:
             # 如果存在，获取序号并加1
@@ -48,6 +68,7 @@ class StudentModel(Base):
 
         # 格式化学号：年份 + 4位序号
         return f"{current_year}{sequence:04d}"
+
 
 class CourseModel(Base):
     __tablename__ = "courses"
@@ -60,7 +81,11 @@ class CourseModel(Base):
     credits = Column(Integer)
     max_student_num = Column(Integer)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc), onupdate=lambda: datetime.datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.datetime.now(timezone.utc),
+        onupdate=lambda: datetime.datetime.now(timezone.utc),
+    )
     start_date = Column(DateTime(timezone=True), nullable=True, comment="课程开始日期")
     end_date = Column(DateTime(timezone=True), nullable=True, comment="课程结束日期")
     academic_year = Column(Integer, nullable=True, comment="学年")
@@ -69,16 +94,20 @@ class CourseModel(Base):
     students = relationship("StudentCourseModel", back_populates="course")
     schedules = relationship("CourseScheduleModel", back_populates="course")
 
+
 class StudentCourseModel(Base):
     __tablename__ = "student_courses"
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id"))
     course_id = Column(Integer, ForeignKey("courses.id"))
-    enrollment_date = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
+    enrollment_date = Column(
+        DateTime, default=lambda: datetime.datetime.now(timezone.utc)
+    )
 
     student = relationship("StudentModel", back_populates="courses")
     course = relationship("CourseModel", back_populates="students")
+
 
 class CourseScheduleModel(Base):
     __tablename__ = "course_schedules"
