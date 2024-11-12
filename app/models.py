@@ -11,8 +11,6 @@ from sqlalchemy import (
     Integer,
     String,
     Time,
-    event,
-    func,
 )
 from sqlalchemy.orm import Session, relationship
 
@@ -76,10 +74,11 @@ class CourseModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(20), unique=True, index=True)
     name = Column(String(100), index=True)
-    description = Column(String(500))
+    description = Column(String(500), nullable=True)
     teacher = Column(String(100))
     credits = Column(Integer)
     max_student_num = Column(Integer)
+    classroom_id = Column(Integer, ForeignKey("classrooms.id"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
@@ -93,6 +92,7 @@ class CourseModel(Base):
 
     students = relationship("StudentCourseModel", back_populates="course")
     schedules = relationship("CourseScheduleModel", back_populates="course")
+    classroom = relationship("ClassroomModel", back_populates="courses")
 
 
 class StudentCourseModel(Base):
@@ -119,3 +119,19 @@ class CourseScheduleModel(Base):
     end_time = Column(Time)
 
     course = relationship("CourseModel", back_populates="schedules")
+
+
+class ClassroomModel(Base):
+    __tablename__ = "classrooms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), comment="教室名称")
+    capacity = Column(Integer, comment="容纳人数")
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.datetime.now(timezone.utc),
+        onupdate=lambda: datetime.datetime.now(timezone.utc),
+    )
+
+    courses = relationship("CourseModel", back_populates="classroom")

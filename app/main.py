@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.routers import auth, courses, schedules, students
+from app.routers import auth, classrooms, courses, schedules, students
 from app.utils.auth import oauth2_scheme
 from app.utils.init_db import init_database
 from app.utils.response import response_error
@@ -53,6 +53,12 @@ app.include_router(
     schedules.router,
     prefix="/api",
     tags=["课程表"],
+    dependencies=[Depends(oauth2_scheme)],
+)
+app.include_router(
+    classrooms.router,
+    prefix="/api",
+    tags=["教室管理"],
     dependencies=[Depends(oauth2_scheme)],
 )
 

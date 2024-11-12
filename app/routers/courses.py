@@ -1,17 +1,17 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, Security
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from sqlalchemy.orm import Session
 
 from app.models import (
+    ClassroomModel,
     CourseModel,
     CourseScheduleModel,
-    Semester,
     StudentCourseModel,
     StudentModel,
 )
-from app.schemas import CourseCreate, CourseUpdate
+from app.schemas import CourseCreate, CourseUpdate, CourseWithSchedule
 from app.utils.auth import get_current_user
 from app.utils.init_db import get_db
 from app.utils.response import model_to_dict, response_error, response_success
@@ -22,95 +22,62 @@ router = APIRouter()
 @router.post("/courses")
 def create_course(course: CourseCreate, db: Session = Depends(get_db)):
     try:
-        # CourseCreate 的验证器会自动将 start_time 转换为 datetime 对象
         course_data = course.model_dump()
+
+        # 如果提供了教室ID，检查教室是否存在
+        if course_data.get("classroom_id"):
+            classroom = (
+                db.query(ClassroomModel)
+                .filter(ClassroomModel.id == course_data["classroom_id"])
+                .first()
+            )
+            if not classroom:
+                return response_error(message="指定的教室不存在")
+
         db_course = CourseModel(**course_data)
         db.add(db_course)
         db.commit()
         db.refresh(db_course)
-        return response_success(data=model_to_dict(db_course))
+
+        # 转换为字典并添加教室信息
+        course_dict = model_to_dict(db_course)
+        course_dict["classroom"] = (
+            model_to_dict(db_course.classroom) if db_course.classroom else None
+        )
+        course_dict["schedules"] = []
+
+        return response_success(data=course_dict)
     except ValueError as e:
         return response_error(message=f"日期格式错误: {str(e)}")
     except Exception as e:
         return response_error(message=f"创建课程失败: {str(e)}")
 
 
-@router.get("/courses")
+@router.get("/courses", response_model=List[CourseWithSchedule])
 def get_courses(
-    name: Optional[str] = Query(None, description="课程名称"),
-    code: Optional[str] = Query(None, description="课程代码"),
-    teacher: Optional[str] = Query(None, description="教师姓名"),
-    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
-    academic_year: Optional[int] = Query(None, description="学年"),
-    semester: Optional[Semester] = Query(None, description="学期 (1 或 2)"),
+    name: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
 ):
     query = db.query(CourseModel)
 
     if name:
-        query = query.filter(CourseModel.name.like(f"%{name}%"))
-    if code:
-        query = query.filter(CourseModel.code.like(f"%{code}%"))
-    if teacher:
-        query = query.filter(CourseModel.teacher.like(f"%{teacher}%"))
-    if academic_year:
-        query = query.filter(CourseModel.academic_year == academic_year)
-    if semester:
-        query = query.filter(CourseModel.semester == semester)
+        query = query.filter(CourseModel.name.ilike(f"%{name}%"))
 
-    try:
-        if start_date:
-            start = datetime.strptime(start_date, "%Y-%m-%d")
-            query = query.filter(CourseModel.start_date >= start)
-        if end_date:
-            end = datetime.strptime(end_date, "%Y-%m-%d")
-            query = query.filter(CourseModel.end_date <= end)
-    except ValueError:
-        return response_error(message="日期格式错误，请使用 YYYY-MM-DD 格式")
+    courses = query.offset(skip).limit(limit).all()
 
-    courses = query.all()
-
-    course_data = []
+    # 转换为字典并添加教室信息
+    result = []
     for course in courses:
-        # 获取课程的时间安排
-        schedules = (
-            db.query(CourseScheduleModel)
-            .filter(CourseScheduleModel.course_id == course.id)
-            .all()
-        )
-
-        # 转换课程基本信息
-        course_info = model_to_dict(course)
-
-        # 添加时间安排信息
-        course_info["schedules"] = [
-            {
-                "weekday": schedule.weekday,
-                "start_time": schedule.start_time.strftime("%H:%M"),
-                "end_time": schedule.end_time.strftime("%H:%M"),
-            }
-            for schedule in schedules
+        course_dict = model_to_dict(course)
+        course_dict["schedules"] = [
+            model_to_dict(schedule) for schedule in course.schedules
         ]
+        course_dict["classroom_name"] = course.classroom.name
+        result.append(course_dict)
 
-        # 获取已选课人数
-        enrolled_count = (
-            db.query(StudentCourseModel)
-            .filter(StudentCourseModel.course_id == course.id)
-            .count()
-        )
-
-        # 添加选课信息
-        course_info.update(
-            {
-                "enrolled_count": enrolled_count,
-                "remaining_slots": course.max_student_num - enrolled_count,
-            }
-        )
-
-        course_data.append(course_info)
-
-    return response_success(data=course_data)
+    return response_success(data=result)
 
 
 @router.get("/courses/my-selection")
@@ -190,12 +157,22 @@ def get_my_course_selection(
         return response_error(message=f"获取课程选择情况失败: {str(e)}")
 
 
-@router.get("/courses/{course_id}")
+@router.get("/courses/{course_id}", response_model=CourseWithSchedule)
 def get_course(course_id: int, db: Session = Depends(get_db)):
     course = db.query(CourseModel).filter(CourseModel.id == course_id).first()
-    if not course:
-        return response_error(code=404, message="课程不存在")
-    return response_success(data=course)
+    if course is None:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    # 转换为字典并添加教室信息
+    course_dict = model_to_dict(course)
+    course_dict["schedules"] = [
+        model_to_dict(schedule) for schedule in course.schedules
+    ]
+    course_dict["classroom"] = (
+        model_to_dict(course.classroom) if course.classroom else None
+    )
+
+    return response_success(data=course_dict)
 
 
 @router.post("/courses/{course_id}/enroll")
@@ -295,27 +272,40 @@ def enroll_course(
 def update_course(
     course_id: int, course_update: CourseUpdate, db: Session = Depends(get_db)
 ):
-    # 检查课程是否存在
     db_course = db.query(CourseModel).filter(CourseModel.id == course_id).first()
     if not db_course:
         return response_error(code=404, message="课程不存在")
 
     try:
-        # 获取更新数据，排除None值
         update_data = course_update.model_dump(exclude_unset=True)
 
-        # 如果没有提供任何更新数据
-        if not update_data:
-            return response_error(message="没有提供任何更新数据")
+        # 如果要更新教室，检查新教室是否存在
+        if "classroom_id" in update_data:
+            if update_data["classroom_id"] is not None:
+                classroom = (
+                    db.query(ClassroomModel)
+                    .filter(ClassroomModel.id == update_data["classroom_id"])
+                    .first()
+                )
+                if not classroom:
+                    return response_error(message="指定的教室不存在")
 
-        # 更新课程信息
         for key, value in update_data.items():
             setattr(db_course, key, value)
 
         db.commit()
         db.refresh(db_course)
 
-        return response_success(message="课程更新成功", data=model_to_dict(db_course))
+        # 转换为字典并添加教室信息
+        course_dict = model_to_dict(db_course)
+        course_dict["classroom"] = (
+            model_to_dict(db_course.classroom) if db_course.classroom else None
+        )
+        course_dict["schedules"] = [
+            model_to_dict(schedule) for schedule in db_course.schedules
+        ]
+
+        return response_success(message="课程更新成功", data=course_dict)
     except ValueError as e:
         return response_error(message=f"数据格式错误: {str(e)}")
     except Exception as e:

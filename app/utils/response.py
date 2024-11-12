@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 from typing import Any, Generic, Optional, TypeVar
 
@@ -45,6 +45,8 @@ def model_to_dict(model: Any) -> dict:
         # 处理不同类型的值
         if isinstance(value, datetime):
             result[column.name] = value.strftime("%Y-%m-%d %H:%M:%S")
+        elif isinstance(value, time):
+            result[column.name] = value.strftime("%H:%M:%S")
         elif isinstance(value, Decimal):
             result[column.name] = float(value)
         else:

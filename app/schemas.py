@@ -72,7 +72,7 @@ class Student(StudentBase):
 class CourseBase(BaseModel):
     code: str
     name: str
-    description: str
+    description: str | None = None
     teacher: str
     credits: int
     max_student_num: int
@@ -88,6 +88,7 @@ class SemesterEnum(str, Enum):
 class CourseCreate(CourseBase):
     academic_year: Optional[int] = None
     semester: Optional[Semester] = None
+    classroom_id: Optional[int] = None
 
     @field_validator("start_date", "end_date")
     @classmethod
@@ -129,6 +130,7 @@ class CourseUpdate(CourseBase):
     end_date: Optional[date] = None
     academic_year: Optional[int] = None
     semester: Optional[Semester] = None
+    classroom_id: Optional[int] = None
 
     @field_validator("start_date", "end_date")
     @classmethod
@@ -186,3 +188,46 @@ class TimeSlot(BaseModel):
 class CourseScheduleCreate(BaseModel):
     course_id: int
     time_slots: List[TimeSlot]
+
+
+class ClassroomBase(BaseModel):
+    name: str
+    capacity: int
+
+
+class ClassroomCreate(ClassroomBase):
+    pass
+
+
+class ClassroomUpdate(ClassroomBase):
+    name: str | None = None
+    capacity: int | None = None
+
+
+class Classroom(ClassroomBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CourseScheduleBase(BaseModel):
+    weekday: int
+    start_time: time
+    end_time: time
+
+    class Config:
+        from_attributes = True
+
+
+class CourseWithSchedule(CourseBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    schedules: List[CourseScheduleBase] = []
+    classroom: Classroom | None = None
+
+    class Config:
+        from_attributes = True
