@@ -6,6 +6,7 @@ from app.models import (
     CourseModel,
     CourseScheduleModel,
     StudentCourseModel,
+    StudentModel,
 )
 from app.schemas import CourseScheduleCreate
 from app.utils.auth import get_current_user
@@ -129,6 +130,53 @@ async def get_my_schedules(
     course_ids = [course.id for enrollment, course in enrolled_courses]
 
     # 修改查询，正确连接课程和教室
+    schedules = (
+        db.query(CourseScheduleModel, CourseModel, ClassroomModel)
+        .join(CourseModel, CourseScheduleModel.course_id == CourseModel.id)
+        .outerjoin(ClassroomModel, CourseModel.classroom_id == ClassroomModel.id)
+        .filter(CourseScheduleModel.course_id.in_(course_ids))
+        .all()
+    )
+
+    schedule_data = [
+        {
+            "course_id": course.id,
+            "course_name": course.name,
+            "start_date": course.start_date.strftime("%Y-%m-%d"),
+            "end_date": course.end_date.strftime("%Y-%m-%d"),
+            "weekday": schedule.weekday,
+            "start_time": schedule.start_time.strftime("%H:%M"),
+            "end_time": schedule.end_time.strftime("%H:%M"),
+            "classroom_name": classroom.name if classroom else None,
+        }
+        for schedule, course, classroom in schedules
+    ]
+
+    return response_success(data=schedule_data)
+
+
+@router.get("/schedules/student/{student_id}")
+async def get_student_schedules(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user=Security(get_current_user),
+):
+    # 检查学生是否存在
+    student = db.query(StudentModel).filter(StudentModel.id == student_id).first()
+    if not student:
+        return response_error(code=404, message="学生不存在")
+
+    # 获取学生选修的所有课程
+    enrolled_courses = (
+        db.query(StudentCourseModel, CourseModel)
+        .join(CourseModel)
+        .filter(StudentCourseModel.student_id == student_id)
+        .all()
+    )
+
+    course_ids = [course.id for enrollment, course in enrolled_courses]
+
+    # 查询课程表信息
     schedules = (
         db.query(CourseScheduleModel, CourseModel, ClassroomModel)
         .join(CourseModel, CourseScheduleModel.course_id == CourseModel.id)
