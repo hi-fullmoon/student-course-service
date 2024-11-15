@@ -1,0 +1,194 @@
+@startuml
+
+!theme plain
+skinparam handwritten true
+skinparam defaultFontName "Microsoft YaHei"
+skinparam activity {
+  BackgroundColor LightYellow
+  BorderColor Black
+  FontSize 14
+}
+
+|Client|
+start
+:发起请求;
+
+|Authentication|
+if (需要认证?) then (yes)
+  :验证 JWT Token;
+  if (Token 有效?) then (yes)
+  else (no)
+    :返回认证错误;
+    end
+  endif
+endif
+
+|Auth|
+:POST /login\n;
+note right
+参数:
+* login_data: LoginData
+end note
+
+:GET /current_user\n;
+note right
+参数:
+* current_user: StudentModel
+end note
+
+|Courses|
+:POST /courses\n;
+note right
+参数:
+* course: CourseCreate
+end note
+
+:GET /courses\n;
+note right
+参数:
+* name: str | None
+* skip: int
+* limit: int
+end note
+
+:GET /courses/my-selection\n;
+note right
+参数:
+* name: str | NoneType
+* code: str | NoneType
+* teacher: str | NoneType
+* start_date: str | NoneType
+* end_date: str | NoneType
+* is_enrolled: int | NoneType
+* current_user: StudentModel
+end note
+
+:GET /courses/{course_id}\n;
+note right
+参数:
+* course_id: int
+end note
+
+:POST /courses/{course_id}/enroll\n;
+note right
+参数:
+* course_id: int
+* current_user: StudentModel
+end note
+
+:PUT /courses/{course_id}\n;
+note right
+参数:
+* course_id: int
+* course_update: CourseUpdate
+end note
+
+:DELETE /courses/{course_id}\n;
+note right
+参数:
+* course_id: int
+end note
+
+|Students|
+:POST /students\n;
+note right
+参数:
+* student: StudentCreate
+* current_user: _empty
+end note
+
+:GET /students\n;
+note right
+参数:
+* username: str
+* student_number: str
+* email: str
+* current_user: _empty
+end note
+
+:GET /students/{student_id}\n;
+note right
+参数:
+* student_id: int
+* current_user: _empty
+end note
+
+:PUT /students/{student_id}\n;
+note right
+参数:
+* student_id: int
+* student_update: StudentUpdate
+* current_user: _empty
+end note
+
+:DELETE /students/{student_id}\n;
+note right
+参数:
+* student_id: int
+* current_user: _empty
+end note
+
+|Classrooms|
+:POST /classrooms\n;
+note right
+参数:
+* classroom: ClassroomCreate
+end note
+
+:GET /classrooms\n;
+note right
+参数:
+* name: str | None
+* skip: int
+* limit: int
+end note
+
+:GET /classrooms/{classroom_id}\n;
+note right
+参数:
+* classroom_id: int
+end note
+
+:PUT /classrooms/{classroom_id}\n;
+note right
+参数:
+* classroom_id: int
+* classroom: ClassroomUpdate
+end note
+
+:DELETE /classrooms/{classroom_id}\n;
+note right
+参数:
+* classroom_id: int
+end note
+
+|Schedules|
+:POST /schedules\n;
+note right
+参数:
+* schedule: CourseScheduleCreate
+end note
+
+:GET /schedules/my\n;
+note right
+参数:
+* current_user: _empty
+end note
+
+:GET /schedules/student/{student_id}\n;
+note right
+参数:
+* student_id: int
+* current_user: _empty
+end note
+
+|Response|
+if (处理成功?) then (yes)
+  :返回成功响应;
+else (no)
+  :返回错误信息;
+endif
+
+stop
+
+@enduml

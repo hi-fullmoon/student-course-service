@@ -1,0 +1,73 @@
+@startuml
+
+!theme plain
+skinparam linetype ortho
+skinparam rankdir TB
+skinparam dpi 300
+skinparam nodesep 80
+skinparam ranksep 100
+
+entity "classrooms" as classrooms {
+  + id: INTEGER
+  name: VARCHAR [nullable] // 教室名称
+  capacity: INTEGER [nullable] // 容纳人数
+  created_at: DATETIME [nullable] 
+  updated_at: DATETIME [nullable] 
+}
+
+entity "courses" as courses {
+  + id: INTEGER
+  code: VARCHAR [nullable] 
+  name: VARCHAR [nullable] 
+  description: VARCHAR [nullable] 
+  teacher: VARCHAR [nullable] 
+  credits: INTEGER [nullable] 
+  max_student_num: INTEGER [nullable] 
+  classroom_id: INTEGER [nullable] 
+  created_at: DATETIME [nullable] 
+  updated_at: DATETIME [nullable] 
+  start_date: DATETIME [nullable] // 课程开始日期
+  end_date: DATETIME [nullable] // 课程结束日期
+  academic_year: INTEGER [nullable] // 学年
+  semester: VARCHAR [nullable] // 学期
+}
+
+entity "course_schedules" as course_schedules {
+  + id: INTEGER
+  course_id: INTEGER [nullable] 
+  weekday: INTEGER [nullable] 
+  start_time: TIME [nullable] 
+  end_time: TIME [nullable] 
+}
+
+entity "student_courses" as student_courses {
+  + id: INTEGER
+  student_id: INTEGER [nullable] 
+  course_id: INTEGER [nullable] 
+  enrollment_date: DATETIME [nullable] 
+}
+
+entity "students" as students {
+  + id: INTEGER
+  student_number: VARCHAR [nullable] // 学号
+  username: VARCHAR [nullable] 
+  password: VARCHAR [nullable] 
+  email: VARCHAR [nullable] 
+  gender: VARCHAR [nullable] 
+  is_active: BOOLEAN [nullable] 
+  enrollment_date: DATETIME [nullable] // 入学时间
+  class_name: VARCHAR [nullable] // 班级名称
+  created_at: DATETIME [nullable] 
+  updated_at: DATETIME [nullable] 
+}
+
+"classrooms" ||--o{ "courses"
+"courses" ||--o{ "student_courses"
+"courses" ||--o{ "course_schedules"
+"courses" ||--|| "classrooms"
+"course_schedules" ||--|| "courses"
+"student_courses" ||--|| "students"
+"student_courses" ||--|| "courses"
+"students" ||--o{ "student_courses"
+
+@enduml
