@@ -12,7 +12,11 @@ from app.utils.response import response_error
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_database()
+    try:
+        init_database()
+        print("数据库初始化成功")
+    except Exception as e:
+        print(f"警告: 数据库初始化失败，应用程序将在没有数据库的情况下运行: {str(e)}")
     yield
 
 

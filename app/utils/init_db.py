@@ -35,8 +35,11 @@ def create_database_if_not_exists():
         raise Exception(f"数据库初始化错误: {str(e)}")
 
 
-# 确保数据库存在
-create_database_if_not_exists()
+# 确保数据库存在（可选，如果连接失败则跳过）
+try:
+    create_database_if_not_exists()
+except Exception as e:
+    print(f"警告: 数据库初始化失败，将在运行时重试: {str(e)}")
 
 # 构建MySQL连接URL
 SQLALCHEMY_DATABASE_URL = f"mysql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
