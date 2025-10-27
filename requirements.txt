@@ -7,7 +7,6 @@ sqlalchemy>=2.0.36
 pydantic>=2.8.0
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
-mysqlclient==2.2.0
+PyMySQL>=1.1.0
 mysql-connector-python>=8.0.0
 email-validator>=2.2.0
-eralchemy2
